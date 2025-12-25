@@ -18,7 +18,7 @@ public interface UserServiceClient {
 
     @GetMapping("/lecturers/validate/{lecturerId}")
     UserResponse validateLecturer(@PathVariable Long lecturerId);
-    @GetMapping("/validate/{gradeId}")
+    @GetMapping("/students/validate/{studentId}")
     UserResponse validateStudent(@PathVariable Long studentId);
 
 

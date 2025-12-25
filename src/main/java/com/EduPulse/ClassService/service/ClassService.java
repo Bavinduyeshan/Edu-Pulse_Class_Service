@@ -10,7 +10,9 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 
 import java.time.LocalDateTime;
+import java.util.List;
 import java.util.Optional;
+import java.util.stream.Collectors;
 
 @Service
 @RequiredArgsConstructor
@@ -133,7 +135,79 @@ public class ClassService {
                 .build();
     }
 
-    public Optional<ClassEntity> getClassById(Long classId) {
-        return classRepository.findById(classId);
+    // In ClassService
+    public ClassResponse getClassById(Long classId) {
+        ClassEntity entity = classRepository.findById(classId)
+                .orElseThrow(() -> new RuntimeException("Class not found"));
+
+        GradeResponse grade = userServiceClient.validateGrade(entity.getGradeId());
+        UserResponse lecturer = userServiceClient.validateLecturer(entity.getLecturerId());
+
+        return ClassResponse.builder()
+                .id(entity.getId())
+                .name(entity.getName())
+                .description(entity.getDescription())
+                .gradeId(grade.getId())
+                .gradeName(grade.getName())
+                .lecturerId(lecturer.getId())
+                .lecturerName(lecturer.getFullName())
+                .startDate(entity.getStartDate())
+                .endDate(entity.getEndDate())
+                .status(entity.getStatus())
+                .lectureCount(entity.getLectures().size())  // ← Real count from entity
+                .build();
+    }
+
+    public List<LectureResponse> getLecturesByClass(Long classId) {
+        ClassEntity classEntity = classRepository.findById(classId)
+                .orElseThrow(() -> new RuntimeException("Class not found"));
+
+        return classEntity.getLectures().stream()
+                .map(lecture -> LectureResponse.builder()
+                        .id(lecture.getId())
+                        .classId(classId)
+                        .title(lecture.getTitle())
+                        .description(lecture.getDescription())
+                        .dateTime(lecture.getDateTime())
+                        .videoLink(lecture.getVideoLink())
+                        .pdfUrl(lecture.getPdfUrl())
+                        .createdAt(lecture.getCreatedAt())
+                        .build())
+                .toList();
+    }
+
+
+    // In ClassService.java (add this method)
+    public List<AttendanceResponse> getAttendanceForLecture(Long lectureId) {
+        // Find the lecture first
+        Lecture lecture = lectureRepository.findById(lectureId)
+                .orElseThrow(() -> new RuntimeException("Lecture not found (ID: " + lectureId + ")"));
+
+        // Get all attendance records for this lecture
+        List<Attendance> attendances = attendanceRepository.findByLectureId(lectureId);
+
+        // Convert to DTOs with fetched student names
+        return attendances.stream()
+                .map(attendance -> {
+                    // Fetch fresh student name via Feign (optional - or use denormalized if you have it)
+                    String studentName = "Unknown Student";
+                    try {
+                        UserResponse student = userServiceClient.validateStudent(attendance.getStudentId());
+                        studentName = student.getFullName();
+                    } catch (FeignException e) {
+                        // Log error if needed, fallback to unknown
+                    }
+
+                    return AttendanceResponse.builder()
+                            .id(attendance.getId())
+                            .studentId(attendance.getStudentId())
+                            .studentName(studentName)
+                            .lectureId(lecture.getId())
+                            .lectureTitle(lecture.getTitle())
+                            .status(attendance.getStatus().name())
+                            .checkInTime(attendance.getCheckInTime())
+                            .build();
+                })
+                .collect(Collectors.toList());
     }
 }

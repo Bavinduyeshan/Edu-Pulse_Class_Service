@@ -40,10 +40,8 @@ public class ClassController {
 
     // ========== Get a single class by ID ==========
     @GetMapping("/{classId}")
-    public ResponseEntity<Optional<ClassEntity>> getClassById(@PathVariable Long classId) {
-        // You can add authorization later (e.g. only enrolled students/lecturer)
-        Optional<ClassEntity> response = classService.getClassById(classId); // Add this method if needed
-        return ResponseEntity.ok(response);
+    public ResponseEntity<ClassResponse> getClassById(@PathVariable Long classId) {
+        return ResponseEntity.ok(classService.getClassById(classId));
     }
 
     // ========== Schedule a new Lecture in a class ==========
@@ -77,17 +75,16 @@ public class ClassController {
     // ========== Optional: Get all lectures for a class ==========
     @GetMapping("/{classId}/lectures")
     public ResponseEntity<List<LectureResponse>> getLecturesByClass(@PathVariable Long classId) {
-        // Implement in service if needed
-        // List<LectureResponse> response = classService.getLecturesByClass(classId);
-        // return ResponseEntity.ok(response);
-        return ResponseEntity.ok(List.of()); // Placeholder
+        List<LectureResponse> response = classService.getLecturesByClass(classId);
+        return ResponseEntity.ok(response);
     }
 
     // ========== Optional: Get attendance for a lecture ==========
+    // In ClassController.java - replace the placeholder
     @GetMapping("/lectures/{lectureId}/attendance")
     @PreAuthorize("hasRole('LECTURER')")
     public ResponseEntity<List<AttendanceResponse>> getAttendanceForLecture(@PathVariable Long lectureId) {
-        // Implement in service if needed
-        return ResponseEntity.ok(List.of()); // Placeholder
+        List<AttendanceResponse> response = classService.getAttendanceForLecture(lectureId);
+        return ResponseEntity.ok(response);
     }
 }
