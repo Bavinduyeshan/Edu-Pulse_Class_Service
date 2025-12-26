@@ -210,4 +210,283 @@ public class ClassService {
                 })
                 .collect(Collectors.toList());
     }
+
+
+    /**
+     * Get all classes for a specific grade
+     */
+    public List<ClassResponse> getClassesByGrade(Long gradeId) {
+        // Validate grade exists
+        GradeResponse grade;
+        try {
+            grade = userServiceClient.validateGrade(gradeId);
+        } catch (FeignException e) {
+            throw new RuntimeException("Grade not found (ID: " + gradeId + "): " + e.getMessage());
+        }
+
+        // Find all classes for this grade
+        List<ClassEntity> classes = classRepository.findByGradeId(gradeId);
+
+        // Convert to DTOs with fetched lecturer names
+        return classes.stream()
+                .map(classEntity -> {
+                    // Fetch lecturer name
+                    String lecturerName = "Unknown Lecturer";
+                    try {
+                        UserResponse lecturer = userServiceClient.validateLecturer(classEntity.getLecturerId());
+                        lecturerName = lecturer.getFullName();
+                    } catch (FeignException e) {
+                        // Log error if needed, fallback to unknown
+                    }
+
+                    return ClassResponse.builder()
+                            .id(classEntity.getId())
+                            .name(classEntity.getName())
+                            .description(classEntity.getDescription())
+                            .gradeId(grade.getId())
+                            .gradeName(grade.getName())
+                            .lecturerId(classEntity.getLecturerId())
+                            .lecturerName(lecturerName)
+                            .startDate(classEntity.getStartDate())
+                            .endDate(classEntity.getEndDate())
+                            .status(classEntity.getStatus())
+                            .lectureCount(classEntity.getLectures() != null ? classEntity.getLectures().size() : 0)
+                            .build();
+                })
+                .collect(Collectors.toList());
+    }
+
+
+    // Optional: Add this method to ClassService.java to get classes by lecturer
+
+    /**
+     * Get all classes taught by a specific lecturer
+     */
+    public List<ClassResponse> getClassesByLecturer(Long lecturerId) {
+        // Validate lecturer exists
+        UserResponse lecturer;
+        try {
+            lecturer = userServiceClient.validateLecturer(lecturerId);
+        } catch (FeignException e) {
+            throw new RuntimeException("Lecturer not found (ID: " + lecturerId + "): " + e.getMessage());
+        }
+
+        // Find all classes for this lecturer
+        List<ClassEntity> classes = classRepository.findByLecturerId(lecturerId);
+
+        // Convert to DTOs with fetched grade names
+        return classes.stream()
+                .map(classEntity -> {
+                    // Fetch grade name
+                    String gradeName = "Unknown Grade";
+                    try {
+                        GradeResponse grade = userServiceClient.validateGrade(classEntity.getGradeId());
+                        gradeName = grade.getName();
+                    } catch (FeignException e) {
+                        // Log error if needed, fallback to unknown
+                    }
+
+                    return ClassResponse.builder()
+                            .id(classEntity.getId())
+                            .name(classEntity.getName())
+                            .description(classEntity.getDescription())
+                            .gradeId(classEntity.getGradeId())
+                            .gradeName(gradeName)
+                            .lecturerId(lecturer.getId())
+                            .lecturerName(lecturer.getFullName())
+                            .startDate(classEntity.getStartDate())
+                            .endDate(classEntity.getEndDate())
+                            .status(classEntity.getStatus())
+                            .lectureCount(classEntity.getLectures() != null ? classEntity.getLectures().size() : 0)
+                            .build();
+                })
+                .collect(Collectors.toList());
+    }
+
+    // ========== Get all classes ==========
+    public List<ClassResponse> getAllClasses() {
+        List<ClassEntity> classes = classRepository.findAll();
+
+        return classes.stream()
+                .map(classEntity -> buildClassResponse(classEntity))
+                .collect(Collectors.toList());
+    }
+
+    // ========== Get a single lecture by ID ==========
+    public LectureResponse getLectureById(Long lectureId) {
+        Lecture lecture = lectureRepository.findById(lectureId)
+                .orElseThrow(() -> new RuntimeException("Lecture not found (ID: " + lectureId + ")"));
+
+        return LectureResponse.builder()
+                .id(lecture.getId())
+                .classId(lecture.getClassEntity().getId())
+                .title(lecture.getTitle())
+                .description(lecture.getDescription())
+                .dateTime(lecture.getDateTime())
+                .videoLink(lecture.getVideoLink())
+                .pdfUrl(lecture.getPdfUrl())
+                .createdAt(lecture.getCreatedAt())
+                .build();
+    }
+
+    // ========== Update class details ==========
+    public ClassResponse updateClass(Long classId, ClassRequest request, Long lecturerId) {
+        ClassEntity classEntity = classRepository.findById(classId)
+                .orElseThrow(() -> new RuntimeException("Class not found (ID: " + classId + ")"));
+
+        // Verify the lecturer owns this class
+        if (!classEntity.getLecturerId().equals(lecturerId)) {
+            throw new RuntimeException("Unauthorized: You can only update your own classes");
+        }
+
+        // Validate grade if changed
+        if (!classEntity.getGradeId().equals(request.getGradeId())) {
+            try {
+                userServiceClient.validateGrade(request.getGradeId());
+            } catch (FeignException e) {
+                throw new RuntimeException("Grade not found (ID: " + request.getGradeId() + "): " + e.getMessage());
+            }
+        }
+
+        // Update fields
+        classEntity.setName(request.getName());
+        classEntity.setDescription(request.getDescription());
+        classEntity.setGradeId(request.getGradeId());
+        classEntity.setStartDate(request.getStartDate());
+        classEntity.setEndDate(request.getEndDate());
+
+        classEntity = classRepository.save(classEntity);
+
+        return buildClassResponse(classEntity);
+    }
+
+    // ========== Delete/Archive a class ==========
+    public void deleteClass(Long classId) {
+        ClassEntity classEntity = classRepository.findById(classId)
+                .orElseThrow(() -> new RuntimeException("Class not found (ID: " + classId + ")"));
+
+        // Option 1: Soft delete (archive) - set status to ARCHIVED
+        classEntity.setStatus(ClassEntity.ClassStatus.ARCHIVED);
+        classRepository.save(classEntity);
+
+        // Option 2: Hard delete (uncomment if you prefer)
+        // classRepository.delete(classEntity);
+    }
+
+    // ========== Get attendance for a specific student ==========
+    public List<AttendanceResponse> getAttendanceForStudent(Long studentId) {
+        // Validate student exists
+        UserResponse student;
+        try {
+            student = userServiceClient.validateStudent(studentId);
+        } catch (FeignException e) {
+            throw new RuntimeException("Student not found (ID: " + studentId + "): " + e.getMessage());
+        }
+
+        // Get all attendance records for this student
+        List<Attendance> attendances = attendanceRepository.findByStudentId(studentId);
+
+        // Convert to DTOs
+        return attendances.stream()
+                .map(attendance -> {
+                    Lecture lecture = attendance.getLecture();
+                    return AttendanceResponse.builder()
+                            .id(attendance.getId())
+                            .studentId(attendance.getStudentId())
+                            .studentName(student.getFullName())
+                            .lectureId(lecture.getId())
+                            .lectureTitle(lecture.getTitle())
+                            .status(attendance.getStatus().name())
+                            .checkInTime(attendance.getCheckInTime())
+                            .build();
+                })
+                .collect(Collectors.toList());
+    }
+
+    // ========== Helper method to build ClassResponse ==========
+    private ClassResponse buildClassResponse(ClassEntity classEntity) {
+        // Fetch grade name
+        String gradeName = "Unknown Grade";
+        try {
+            GradeResponse grade = userServiceClient.validateGrade(classEntity.getGradeId());
+            gradeName = grade.getName();
+        } catch (FeignException e) {
+            // Log error if needed
+        }
+
+        // Fetch lecturer name
+        String lecturerName = "Unknown Lecturer";
+        try {
+            UserResponse lecturer = userServiceClient.validateLecturer(classEntity.getLecturerId());
+            lecturerName = lecturer.getFullName();
+        } catch (FeignException e) {
+            // Log error if needed
+        }
+
+        return ClassResponse.builder()
+                .id(classEntity.getId())
+                .name(classEntity.getName())
+                .description(classEntity.getDescription())
+                .gradeId(classEntity.getGradeId())
+                .gradeName(gradeName)
+                .lecturerId(classEntity.getLecturerId())
+                .lecturerName(lecturerName)
+                .startDate(classEntity.getStartDate())
+                .endDate(classEntity.getEndDate())
+                .status(classEntity.getStatus())
+                .lectureCount(classEntity.getLectures() != null ? classEntity.getLectures().size() : 0)
+                .build();
+    }
+
+    // ========== Update Lecture ==========
+    public LectureResponse updateLecture(Long lectureId, LectureRequest request, Long lecturerId) {
+
+        Lecture lecture = lectureRepository.findById(lectureId)
+                .orElseThrow(() -> new RuntimeException("Lecture not found (ID: " + lectureId + ")"));
+
+        ClassEntity classEntity = lecture.getClassEntity();
+
+        // 🔐 Ensure lecturer owns the class
+        if (!classEntity.getLecturerId().equals(lecturerId)) {
+            throw new RuntimeException("Unauthorized: You can only update lectures of your own classes");
+        }
+
+        // Update fields
+        lecture.setTitle(request.getTitle());
+        lecture.setDescription(request.getDescription());
+        lecture.setDateTime(request.getDateTime());
+        lecture.setVideoLink(request.getVideoLink());
+        lecture.setPdfUrl(request.getPdfUrl());
+
+        lecture = lectureRepository.save(lecture);
+
+        return LectureResponse.builder()
+                .id(lecture.getId())
+                .classId(classEntity.getId())
+                .title(lecture.getTitle())
+                .description(lecture.getDescription())
+                .dateTime(lecture.getDateTime())
+                .videoLink(lecture.getVideoLink())
+                .pdfUrl(lecture.getPdfUrl())
+                .createdAt(lecture.getCreatedAt())
+                .build();
+    }
+
+    // ========== Delete Lecture ==========
+    public void deleteLecture(Long lectureId, Long lecturerId) {
+
+        Lecture lecture = lectureRepository.findById(lectureId)
+                .orElseThrow(() -> new RuntimeException("Lecture not found (ID: " + lectureId + ")"));
+
+        ClassEntity classEntity = lecture.getClassEntity();
+
+        // 🔐 Ensure lecturer owns the class
+        if (!classEntity.getLecturerId().equals(lecturerId)) {
+            throw new RuntimeException("Unauthorized: You can only delete lectures of your own classes");
+        }
+
+        // Hard delete (recommended for lectures)
+        lectureRepository.delete(lecture);
+    }
+
 }
