@@ -190,4 +190,18 @@ public class ClassController {
     }
 
 
+    // ========== NEW: Get my attendance for a lecture ==========
+    @GetMapping("/lectures/{lectureId}/my-attendance")
+    @PreAuthorize("hasRole('STUDENT')")
+    public ResponseEntity<AttendanceResponse> getMyAttendanceForLecture(
+            @PathVariable Long lectureId,
+            @RequestHeader("X-User-Id") Long studentId) {
+
+        AttendanceResponse response =
+                classService.getMyAttendanceForLecture(lectureId, studentId);
+
+        return ResponseEntity.ok(response);
+    }
+
+
 }

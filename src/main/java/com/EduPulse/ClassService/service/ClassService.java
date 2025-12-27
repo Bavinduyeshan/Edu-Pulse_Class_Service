@@ -489,4 +489,38 @@ public class ClassService {
         lectureRepository.delete(lecture);
     }
 
+
+    // ========== Get attendance of logged-in student for a lecture ==========
+    public AttendanceResponse getMyAttendanceForLecture(Long lectureId, Long studentId) {
+
+        // 🔍 Validate lecture exists
+        Lecture lecture = lectureRepository.findById(lectureId)
+                .orElseThrow(() -> new RuntimeException("Lecture not found (ID: " + lectureId + ")"));
+
+        // 🔍 Validate student exists
+        UserResponse student;
+        try {
+            student = userServiceClient.validateStudent(studentId);
+        } catch (FeignException e) {
+            throw new RuntimeException("Student not found (ID: " + studentId + ")");
+        }
+
+        // 🔍 Find attendance record
+        Attendance attendance = attendanceRepository
+                .findByStudentIdAndLectureId(studentId, lectureId)
+                .orElseThrow(() -> new RuntimeException("Attendance not marked for this lecture"));
+
+        // ✅ Build response
+        return AttendanceResponse.builder()
+                .id(attendance.getId())
+                .studentId(studentId)
+                .studentName(student.getFullName())
+                .lectureId(lecture.getId())
+                .lectureTitle(lecture.getTitle())
+                .status(attendance.getStatus().name())
+                .checkInTime(attendance.getCheckInTime())
+                .build();
+    }
+
+
 }
