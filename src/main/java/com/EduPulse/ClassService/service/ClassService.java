@@ -522,5 +522,10 @@ public class ClassService {
                 .build();
     }
 
+    // ========== Get total lectures count ==========
+    public Long getTotalLecturesCount() {
+        return lectureRepository.count();
+    }
+
 
 }

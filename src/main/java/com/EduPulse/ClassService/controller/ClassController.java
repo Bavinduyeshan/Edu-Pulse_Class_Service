@@ -8,6 +8,7 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
+import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
@@ -17,8 +18,10 @@ import java.util.Optional;
 @RestController
 @RequestMapping("/api/classes")
 @RequiredArgsConstructor
-@CrossOrigin(origins = "http://localhost:5173", methods = {RequestMethod.GET, RequestMethod.POST, RequestMethod.OPTIONS})
-
+@CrossOrigin(
+        origins = {"http://localhost:5173", "http://localhost:8085"},  // ✅ Add Admin Service
+        methods = {RequestMethod.GET, RequestMethod.POST, RequestMethod.PUT, RequestMethod.DELETE, RequestMethod.OPTIONS}
+)
 public class ClassController {
 
     private final ClassService classService;
@@ -156,11 +159,7 @@ public class ClassController {
             @PathVariable Long lecturerId,
             @RequestHeader("X-User-Id") Long currentUserId) {
 
-        // Optional security check:
-        // Lecturer can only fetch their own classes
-        if (!currentUserId.equals(lecturerId)) {
-            return ResponseEntity.status(HttpStatus.FORBIDDEN).build();
-        }
+
 
         List<ClassResponse> response = classService.getClassesByLecturer(lecturerId);
         return ResponseEntity.ok(response);
@@ -203,5 +202,12 @@ public class ClassController {
         return ResponseEntity.ok(response);
     }
 
+
+    // ========== ADMIN: Get total lectures count ==========
+    @GetMapping("/lectures/count")
+    @PreAuthorize("hasRole('ADMIN')")
+    public ResponseEntity<Long> getTotalLecturesCount() {
+        return ResponseEntity.ok(classService.getTotalLecturesCount());
+    }
 
 }
